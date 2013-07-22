@@ -35,6 +35,7 @@ def shock_filter(img, sigma = 11, str_sigma = 11, blend= 0.5, iter_n = 4, thresh
         img1[m] = dil[m]
         img = np.uint8(img * (1.0 - blend) + img1 * blend)
     
+    #return cv2.morphologyEx(img, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 1)), iterations=1)
     return img
     
 
