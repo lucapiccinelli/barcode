@@ -249,7 +249,7 @@ class BarcodeTools(object):
         
 class BarcodeInfo(object):
     
-    def __init__(self, bcode_img, decode_str = '', barcode_frame, contour):
+    def __init__(self, bcode_img, decode_str, barcode_frame, contour):
         self.ID = id(bcode_img)
         self.bcode_img = bcode_img
         self.decode_str = decode_str
@@ -260,26 +260,28 @@ class BarcodeInfo(object):
         
         self.update_candidates = []
         
-        self.to_remove = False 
+        self.to_remove = 0
         
     def add_update_candidate(self, update_candidate):
-        self.update_candidates.append(object)
+        self.update_candidates.append(update_candidate)
         
     def update(self):
         new_barcodes = []
         if len(self.update_candidates) == 0:
-            self.to_remove = True
+            self.to_remove += 1
         else:
+            self.to_remove = 0
             update_obj = min(self.update_candidates)[1]
             if self.decode_str == '':
                 self.decode_str = update_obj.decode_str
             self.contour = update_obj.contour
             self.bcode_img = update_obj.bcode_img
-            self.update_candidates = []
             
             for b_frame in self.update_candidates:
-                if b_frame != update_obj:
-                    new_barcodes.append(b_frame)
+                if b_frame[1] != update_obj:
+                    new_barcodes.append(b_frame[1])
+                    
+            self.update_candidates = []
         
         return new_barcodes
 
@@ -291,25 +293,32 @@ class BarcodeFrame(object):
         self.decode_str = decode_str
         self.contour = contour
         
+        self.RADIANS_SCALE = 0.017453292519943295
+        
         self.x = x
         self.y = y
-        self.alpha = -alpha
+        self.alpha = -alpha * self.RADIANS_SCALE# math.pi / 180.0
         self.context = []
-        self.rotation_M = np.array((cos(self.alpha),  sin(self.alpha), -self.x), 
-                                   (-sin(self.alpha), cos(self.alpha), -self.y), 
-                                   (0               , 0              ,  1))
+        
+        rotation_M = np.array(([cos(self.alpha),  sin(self.alpha), 0.0], 
+                               [-sin(self.alpha), cos(self.alpha), 0.0], 
+                               [0.0             , 0.0            , 1.0]))
+        translation2_M = np.array(([1.0, 0.0, -self.x],
+                                   [0.0, 1.0, -self.y],
+                                   [0.0, 0.0, 1.0]))
+        self.tranform_M = rotation_M.dot(translation2_M)
         
     def add_context_point(self, x, y):
         p = np.array((x, y, 1))
         #normalizzo l'angolo del punto di contesto rispetto all'angolo del punto corrente 
-        rotated_p = self.rotation_M.dot(p)
+        rotated_p = np.around(self.tranform_M.dot(p), decimals=4)
         #aggiungo le coordinate polari del punto di contesto
-        self.context.append(np.array((np.linalg.norm(rotated_p), math.atan2(rotated_p[1], rotated_p[0]))))
+        self.context.append(np.array((np.linalg.norm(rotated_p), math.atan2(rotated_p[1], rotated_p[0]) / self.RADIANS_SCALE)))
         #riordino la lista del contesto per angolo di rotazione 
-        self.context.sort(key=itemgetter(1, 0)) 
+        self.context.sort(key=itemgetter(1, 0))
         
     def match_score(self, barcode_frame):
         score = 0
-        for p in barcode_frame.context:
-            score += np.linalg.norm(p)
+        for self_p, p in zip(self.context, barcode_frame.context):
+            score += np.linalg.norm(self_p - p)
         return score
